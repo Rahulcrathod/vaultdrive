@@ -4,7 +4,7 @@
   "description": "VaultDrive - Zero-Knowledge Personal Cloud Storage with 2 GB Quota",
   "private": true,
   "scripts": {
-    "build": "cd client && npm install && npm run build && cd ../server && npm install",
+    "build": "cd client && npm install --include=dev && npm run build && cd ../server && npm install",
     "start": "node server/src/server.js",
     "server:install": "cd server && npm install",
     "client:install": "cd client && npm install",
