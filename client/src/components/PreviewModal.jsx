@@ -14,12 +14,30 @@ import {
 } from "lucide-react";
 
 export default function PreviewModal({ file, isOpen, onClose }) {
-  const { encryptionKey } = useAuth();
+  const { user, encryptionKey, unlockVault } = useAuth();
   const [decryptedBlob, setDecryptedBlob] = useState(null);
   const [blobUrl, setBlobUrl] = useState(null);
   const [textContent, setTextContent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [unlockPass, setUnlockPass] = useState("");
+  const [unlocking, setUnlocking] = useState(false);
+  const [unlockError, setUnlockError] = useState(null);
+
+  const handleUnlock = async (e) => {
+    e.preventDefault();
+    if (!unlockPass) return;
+    try {
+      setUnlocking(true);
+      setUnlockError(null);
+      await unlockVault(unlockPass);
+      setUnlockPass("");
+    } catch (err) {
+      setUnlockError(err.message || "Failed to unlock vault. Check your password.");
+    } finally {
+      setUnlocking(false);
+    }
+  };
 
   useEffect(() => {
     if (!isOpen || !file) {
@@ -28,6 +46,11 @@ export default function PreviewModal({ file, isOpen, onClose }) {
       setBlobUrl(null);
       setTextContent(null);
       setError(null);
+      return;
+    }
+
+    if (!encryptionKey) {
+      setLoading(false);
       return;
     }
 
@@ -94,7 +117,7 @@ export default function PreviewModal({ file, isOpen, onClose }) {
       isMounted = false;
       if (blobUrl) URL.revokeObjectURL(blobUrl);
     };
-  }, [isOpen, file]);
+  }, [isOpen, file, encryptionKey]);
 
   if (!isOpen || !file) return null;
 
@@ -151,7 +174,37 @@ export default function PreviewModal({ file, isOpen, onClose }) {
 
         {/* Content Body */}
         <div className="flex-1 overflow-auto p-6 flex items-center justify-center min-h-[300px] bg-slate-950/40">
-          {loading && (
+          {!encryptionKey && (
+            <div className="text-center py-10 max-w-sm mx-auto">
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto mb-3 text-amber-400">
+                <Lock className="w-6 h-6" />
+              </div>
+              <h4 className="text-base font-bold text-white mb-1">Vault Locked</h4>
+              <p className="text-xs text-slate-400 mb-4">
+                Enter your account password to unlock client-side decryption and preview this file.
+              </p>
+              <form onSubmit={handleUnlock} className="space-y-3">
+                <input
+                  type="password"
+                  placeholder="Enter your account password..."
+                  value={unlockPass}
+                  onChange={(e) => setUnlockPass(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-teal-500"
+                  autoFocus
+                />
+                {unlockError && <p className="text-xs text-rose-400">{unlockError}</p>}
+                <button
+                  type="submit"
+                  disabled={unlocking || !unlockPass}
+                  className="w-full py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md shadow-teal-500/20 transition-all"
+                >
+                  {unlocking ? "Unlocking..." : "Unlock Vault & Preview"}
+                </button>
+              </form>
+            </div>
+          )}
+
+          {encryptionKey && loading && (
             <div className="text-center py-12">
               <Loader2 className="w-8 h-8 text-teal-400 animate-spin mx-auto mb-3" />
               <p className="text-sm font-semibold text-slate-200">
@@ -163,7 +216,7 @@ export default function PreviewModal({ file, isOpen, onClose }) {
             </div>
           )}
 
-          {error && (
+          {encryptionKey && error && (
             <div className="text-center py-12 max-w-md">
               <AlertCircle className="w-10 h-10 text-rose-400 mx-auto mb-3" />
               <p className="text-sm font-semibold text-slate-200">Decryption Failed</p>

@@ -33,11 +33,102 @@ import {
   RefreshCw,
   Lock,
   ArrowUpDown,
-  Filter
+  Filter,
+  X
 } from "lucide-react";
 
+// In-memory cache for decrypted thumbnails to avoid re-decrypting
+const thumbnailCache = new Map();
+
+function EncryptedThumbnail({ file, encryptionKey }) {
+  const fileId = file._id || file.id;
+  const [thumbUrl, setThumbUrl] = useState(() => thumbnailCache.get(fileId) || null);
+  const [loading, setLoading] = useState(!thumbUrl && Boolean(encryptionKey));
+
+  useEffect(() => {
+    let isMounted = true;
+
+    if (thumbUrl || !encryptionKey) {
+      setLoading(false);
+      return;
+    }
+
+    if (thumbnailCache.has(fileId)) {
+      setThumbUrl(thumbnailCache.get(fileId));
+      setLoading(false);
+      return;
+    }
+
+    async function loadThumb() {
+      try {
+        setLoading(true);
+        const meta = await api(`/api/files/${fileId}/download-url`, { method: "POST" });
+        const targetUrl = meta.downloadUrl.startsWith("http")
+          ? meta.downloadUrl
+          : `${API_URL}${meta.downloadUrl}`;
+        const resp = await fetch(targetUrl);
+        if (!resp.ok) throw new Error("Fetch failed");
+        const buf = await resp.arrayBuffer();
+        const blob = await decryptFileToBlob(buf, meta.nonce, encryptionKey, meta.mimeType || "image/jpeg");
+        if (!isMounted) return;
+        const url = URL.createObjectURL(blob);
+        thumbnailCache.set(fileId, url);
+        setThumbUrl(url);
+      } catch (err) {
+        // Thumbnail failed silently, fallback to icon
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
+    loadThumb();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [fileId, encryptionKey, thumbUrl]);
+
+  if (thumbUrl) {
+    return (
+      <div className="w-full h-40 rounded-xl overflow-hidden mb-3 bg-slate-950 border border-slate-800/80 relative flex items-center justify-center">
+        <img
+          src={thumbUrl}
+          alt={file.originalName}
+          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+          loading="lazy"
+        />
+        <span className="absolute top-2 right-2 text-[10px] text-teal-400 font-mono flex items-center space-x-0.5 bg-slate-950/80 px-1.5 py-0.5 rounded border border-teal-500/20 backdrop-blur-sm">
+          <Lock className="w-2.5 h-2.5" />
+          <span>E2EE</span>
+        </span>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="w-full h-40 rounded-xl overflow-hidden mb-3 bg-slate-950/70 border border-slate-800 flex flex-col items-center justify-center relative animate-pulse">
+        <Image className="w-7 h-7 text-teal-500/40 mb-1" />
+        <span className="text-[10px] text-slate-500 font-mono">Decrypting photo...</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-between mb-3">
+      <div className="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700/80 flex items-center justify-center">
+        <Image className="w-5 h-5 text-teal-400" />
+      </div>
+      <span className="text-[10px] text-teal-400 font-mono flex items-center space-x-0.5 bg-teal-500/10 px-1.5 py-0.5 rounded border border-teal-500/20">
+        <Lock className="w-2.5 h-2.5" />
+        <span>E2EE</span>
+      </span>
+    </div>
+  );
+}
+
 export default function Dashboard() {
-  const { user, encryptionKey, storage, refreshStorage } = useAuth();
+  const { user, encryptionKey, storage, refreshStorage, unlockVault, hasKey } = useAuth();
 
   const [files, setFiles] = useState([]);
   const [folders, setFolders] = useState([]);
@@ -56,6 +147,26 @@ export default function Dashboard() {
   const [renameItem, setRenameItem] = useState(null); // { item, type }
   const [moveFile, setMoveFile] = useState(null);
   const [activeMenuId, setActiveMenuId] = useState(null);
+  const [isUnlockOpen, setIsUnlockOpen] = useState(false);
+  const [unlockPassword, setUnlockPassword] = useState("");
+  const [unlockError, setUnlockError] = useState(null);
+  const [unlocking, setUnlocking] = useState(false);
+
+  const handleUnlockVault = async (e) => {
+    e.preventDefault();
+    if (!unlockPassword) return;
+    try {
+      setUnlocking(true);
+      setUnlockError(null);
+      await unlockVault(unlockPassword);
+      setIsUnlockOpen(false);
+      setUnlockPassword("");
+    } catch (err) {
+      setUnlockError(err.message || "Failed to unlock vault. Check your password.");
+    } finally {
+      setUnlocking(false);
+    }
+  };
 
   // Fetch files & folders
   const loadContent = useCallback(async () => {
@@ -353,6 +464,24 @@ export default function Dashboard() {
 
       {/* Files Section */}
       <div>
+        {/* Vault lock status banner if key is locked */}
+        {!hasKey && (
+          <div className="mb-4 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center space-x-2.5 text-amber-300">
+              <Lock className="w-4 h-4 shrink-0 text-amber-400" />
+              <span>
+                <strong>Vault Locked:</strong> Encryption key not unlocked in this session. Enter your password to view photos and preview encrypted files.
+              </span>
+            </div>
+            <button
+              onClick={() => setIsUnlockOpen(true)}
+              className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold whitespace-nowrap self-start sm:self-auto transition-colors shadow-md shadow-amber-500/20"
+            >
+              Unlock Vault
+            </button>
+          </div>
+        )}
+
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
             Files ({filteredFiles.length})
@@ -393,25 +522,31 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {filteredFiles.map((file) => {
               const fileId = file._id || file.id;
+              const isPhoto = file.category === "photo" || file.mimeType?.startsWith("image/");
               return (
                 <div
                   key={fileId}
-                  className="group relative bg-slate-900/70 border border-slate-800 hover:border-teal-500/40 rounded-2xl p-4 transition-all hover:shadow-xl hover:shadow-teal-500/5 flex flex-col justify-between"
+                  onClick={() => setPreviewFile(file)}
+                  className="group relative bg-slate-900/70 hover:bg-slate-800/80 border border-slate-800 hover:border-teal-500/50 rounded-2xl p-4 transition-all hover:shadow-xl hover:shadow-teal-500/10 flex flex-col justify-between cursor-pointer"
                 >
                   <div>
-                    {/* Top row */}
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700/80 flex items-center justify-center">
-                        {getFileIcon(file.category, file.mimeType)}
-                      </div>
+                    {/* Thumbnail for photos, or Category Icon for other types */}
+                    {isPhoto ? (
+                      <EncryptedThumbnail file={file} encryptionKey={encryptionKey} />
+                    ) : (
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700/80 flex items-center justify-center">
+                          {getFileIcon(file.category, file.mimeType)}
+                        </div>
 
-                      <div className="flex items-center space-x-1">
-                        <span className="text-[10px] text-teal-400 font-mono flex items-center space-x-0.5 bg-teal-500/10 px-1.5 py-0.5 rounded border border-teal-500/20">
-                          <Lock className="w-2.5 h-2.5" />
-                          <span>E2EE</span>
-                        </span>
+                        <div className="flex items-center space-x-1">
+                          <span className="text-[10px] text-teal-400 font-mono flex items-center space-x-0.5 bg-teal-500/10 px-1.5 py-0.5 rounded border border-teal-500/20">
+                            <Lock className="w-2.5 h-2.5" />
+                            <span>E2EE</span>
+                          </span>
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     {/* File info */}
                     <h4
@@ -432,35 +567,50 @@ export default function Dashboard() {
                   {/* Actions bar */}
                   <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-slate-400">
                     <button
-                      onClick={() => setPreviewFile(file)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPreviewFile(file);
+                      }}
                       title="Preview / Decrypt"
                       className="p-1.5 rounded-lg hover:text-teal-400 hover:bg-slate-800 transition-colors"
                     >
                       <Eye className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => handleDownload(file)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDownload(file);
+                      }}
                       title="Download Decrypted"
                       className="p-1.5 rounded-lg hover:text-teal-400 hover:bg-slate-800 transition-colors"
                     >
                       <Download className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => setMoveFile(file)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMoveFile(file);
+                      }}
                       title="Move to Folder"
                       className="p-1.5 rounded-lg hover:text-teal-400 hover:bg-slate-800 transition-colors"
                     >
                       <FolderSymlink className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => setRenameItem({ item: file, type: "file" })}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setRenameItem({ item: file, type: "file" });
+                      }}
                       title="Rename"
                       className="p-1.5 rounded-lg hover:text-teal-400 hover:bg-slate-800 transition-colors"
                     >
                       <Edit3 className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => handleDeleteFile(file)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteFile(file);
+                      }}
                       title="Delete (Frees 2 GB Quota)"
                       className="p-1.5 rounded-lg hover:text-rose-400 hover:bg-slate-800 transition-colors"
                     >
@@ -488,10 +638,14 @@ export default function Dashboard() {
                 {filteredFiles.map((file) => {
                   const fileId = file._id || file.id;
                   return (
-                    <tr key={fileId} className="hover:bg-slate-800/40 transition-colors">
+                    <tr
+                      key={fileId}
+                      onClick={() => setPreviewFile(file)}
+                      className="hover:bg-slate-800/40 transition-colors cursor-pointer group"
+                    >
                       <td className="py-3 px-4 flex items-center space-x-3">
                         {getFileIcon(file.category, file.mimeType)}
-                        <span className="font-semibold text-slate-100 truncate max-w-xs sm:max-w-md">
+                        <span className="font-semibold text-slate-100 truncate max-w-xs sm:max-w-md group-hover:text-teal-300">
                           {file.originalName}
                         </span>
                       </td>
@@ -503,35 +657,50 @@ export default function Dashboard() {
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end space-x-1.5 text-slate-400">
                           <button
-                            onClick={() => setPreviewFile(file)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPreviewFile(file);
+                            }}
                             className="p-1.5 rounded hover:text-teal-400 hover:bg-slate-800"
                             title="Preview"
                           >
                             <Eye className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => handleDownload(file)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownload(file);
+                            }}
                             className="p-1.5 rounded hover:text-teal-400 hover:bg-slate-800"
                             title="Download"
                           >
                             <Download className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => setMoveFile(file)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setMoveFile(file);
+                            }}
                             className="p-1.5 rounded hover:text-teal-400 hover:bg-slate-800"
                             title="Move"
                           >
                             <FolderSymlink className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => setRenameItem({ item: file, type: "file" })}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setRenameItem({ item: file, type: "file" });
+                            }}
                             className="p-1.5 rounded hover:text-teal-400 hover:bg-slate-800"
                             title="Rename"
                           >
                             <Edit3 className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => handleDeleteFile(file)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteFile(file);
+                            }}
                             className="p-1.5 rounded hover:text-rose-400 hover:bg-slate-800"
                             title="Delete"
                           >
@@ -584,6 +753,63 @@ export default function Dashboard() {
         onClose={() => setMoveFile(null)}
         onMoved={loadContent}
       />
+
+      {/* Unlock Vault Modal */}
+      {isUnlockOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl relative">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-4">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white text-sm">Unlock Private Vault</h3>
+                  <p className="text-[11px] text-slate-400">Zero-Knowledge AES-256-GCM Key Derivation</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsUnlockOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUnlockVault} className="space-y-4">
+              <p className="text-xs text-slate-300">
+                Enter your account password to unlock client-side decryption on this device.
+              </p>
+              <input
+                type="password"
+                required
+                autoFocus
+                placeholder="Enter your account password..."
+                value={unlockPassword}
+                onChange={(e) => setUnlockPassword(e.target.value)}
+                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-teal-500"
+              />
+              {unlockError && <p className="text-xs text-rose-400">{unlockError}</p>}
+              <div className="flex items-center justify-end space-x-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsUnlockOpen(false)}
+                  className="px-3.5 py-2 text-xs font-semibold text-slate-400 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={unlocking || !unlockPassword}
+                  className="px-4 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md shadow-teal-500/20 transition-all"
+                >
+                  {unlocking ? "Unlocking..." : "Unlock Vault"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
