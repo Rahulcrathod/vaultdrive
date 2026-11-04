@@ -43,6 +43,7 @@ const thumbnailCache = new Map();
 function EncryptedThumbnail({ file, encryptionKey }) {
   const fileId = file._id || file.id;
   const [thumbUrl, setThumbUrl] = useState(() => thumbnailCache.get(fileId) || null);
+  const [fallbackDataUrl, setFallbackDataUrl] = useState(null);
   const [loading, setLoading] = useState(!thumbUrl && Boolean(encryptionKey));
 
   useEffect(() => {
@@ -74,6 +75,14 @@ function EncryptedThumbnail({ file, encryptionKey }) {
         const url = URL.createObjectURL(blob);
         thumbnailCache.set(fileId, url);
         setThumbUrl(url);
+
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          if (isMounted && reader.result) {
+            setFallbackDataUrl(reader.result);
+          }
+        };
+        reader.readAsDataURL(blob);
       } catch (err) {
         // Thumbnail failed silently, fallback to icon
       } finally {
@@ -94,6 +103,11 @@ function EncryptedThumbnail({ file, encryptionKey }) {
         <img
           src={thumbUrl}
           alt={file.originalName}
+          onError={() => {
+            if (fallbackDataUrl && thumbUrl !== fallbackDataUrl) {
+              setThumbUrl(fallbackDataUrl);
+            }
+          }}
           className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
           loading="lazy"
         />

@@ -9,6 +9,8 @@ export default function ForgotPassword() {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState(null);
 
+  const [serverMsg, setServerMsg] = useState(null);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!email.trim()) {
@@ -19,10 +21,11 @@ export default function ForgotPassword() {
     try {
       setLoading(true);
       setError(null);
-      await api("/api/auth/forgot-password", {
+      const res = await api("/api/auth/forgot-password", {
         method: "POST",
         body: JSON.stringify({ email: email.trim() })
       });
+      setServerMsg(res.message);
       setSubmitted(true);
     } catch (err) {
       setError(err.message || "Failed to request password reset.");
@@ -55,10 +58,18 @@ export default function ForgotPassword() {
           <div className="space-y-4 animate-fade-in text-center">
             <div className="p-4 rounded-2xl bg-teal-500/10 border border-teal-500/20 text-xs text-teal-300 space-y-2">
               <CheckCircle2 className="w-8 h-8 text-teal-400 mx-auto mb-1" />
-              <p className="font-semibold text-white text-sm">Check your inbox</p>
+              <p className="font-semibold text-white text-sm">Check your email</p>
               <p className="text-slate-300 leading-relaxed">
-                If an account exists for <strong className="text-teal-300">{email}</strong>, we've sent password reset instructions with an expiration of 15 minutes.
+                {serverMsg || `Password reset instructions have been sent to ${email}.`}
               </p>
+              <div className="pt-2 text-[11px] text-amber-300/90 text-left bg-slate-950/40 p-2.5 rounded-lg border border-amber-500/20">
+                <p className="font-bold mb-1">📌 Can't find the email?</p>
+                <ul className="list-disc list-inside space-y-0.5 text-slate-300">
+                  <li>Check your <strong>Spam / Junk</strong> folder.</li>
+                  <li>Check <strong>Promotions / Updates</strong> tab in Gmail.</li>
+                  <li>If your account email is the same as the sender email, Gmail places it in your <strong>Sent Mail</strong>.</li>
+                </ul>
+              </div>
             </div>
 
             <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-left text-xs text-amber-300 flex items-start space-x-2.5">

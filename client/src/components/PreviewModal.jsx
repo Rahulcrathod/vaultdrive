@@ -17,12 +17,16 @@ export default function PreviewModal({ file, isOpen, onClose }) {
   const { user, encryptionKey, unlockVault } = useAuth();
   const [decryptedBlob, setDecryptedBlob] = useState(null);
   const [blobUrl, setBlobUrl] = useState(null);
+  const [dataUrl, setDataUrl] = useState(null);
+  const [imgSrc, setImgSrc] = useState(null);
   const [textContent, setTextContent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [unlockPass, setUnlockPass] = useState("");
   const [unlocking, setUnlocking] = useState(false);
   const [unlockError, setUnlockError] = useState(null);
+
+  const fileId = file?._id || file?.id;
 
   const handleUnlock = async (e) => {
     e.preventDefault();
@@ -40,10 +44,11 @@ export default function PreviewModal({ file, isOpen, onClose }) {
   };
 
   useEffect(() => {
-    if (!isOpen || !file) {
-      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    if (!isOpen || !fileId) {
       setDecryptedBlob(null);
       setBlobUrl(null);
+      setDataUrl(null);
+      setImgSrc(null);
       setTextContent(null);
       setError(null);
       return;
@@ -55,6 +60,7 @@ export default function PreviewModal({ file, isOpen, onClose }) {
     }
 
     let isMounted = true;
+    let localBlobUrl = null;
 
     async function loadAndDecrypt() {
       try {
@@ -62,7 +68,7 @@ export default function PreviewModal({ file, isOpen, onClose }) {
         setError(null);
 
         // 1. Get download URL & cryptographic metadata
-        const meta = await api(`/api/files/${file._id || file.id}/download-url`, {
+        const meta = await api(`/api/files/${fileId}/download-url`, {
           method: "POST"
         });
 
@@ -82,14 +88,27 @@ export default function PreviewModal({ file, isOpen, onClose }) {
           ciphertextBuffer,
           meta.nonce,
           encryptionKey,
-          meta.mimeType
+          meta.mimeType || "application/octet-stream"
         );
 
         if (!isMounted) return;
 
-        const url = URL.createObjectURL(blob);
+        localBlobUrl = URL.createObjectURL(blob);
         setDecryptedBlob(blob);
-        setBlobUrl(url);
+        setBlobUrl(localBlobUrl);
+        setImgSrc(localBlobUrl);
+
+        // For images, generate Data URL as an ultra-reliable fallback
+        const isPhoto = file.category === "photo" || file.mimeType?.startsWith("image/") || meta.mimeType?.startsWith("image/");
+        if (isPhoto) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            if (isMounted && reader.result) {
+              setDataUrl(reader.result);
+            }
+          };
+          reader.readAsDataURL(blob);
+        }
 
         // If it's a text/json/markdown file, also read text
         if (
@@ -115,9 +134,11 @@ export default function PreviewModal({ file, isOpen, onClose }) {
 
     return () => {
       isMounted = false;
-      if (blobUrl) URL.revokeObjectURL(blobUrl);
+      if (localBlobUrl) {
+        URL.revokeObjectURL(localBlobUrl);
+      }
     };
-  }, [isOpen, file, encryptionKey]);
+  }, [isOpen, fileId, encryptionKey]);
 
   if (!isOpen || !file) return null;
 
@@ -230,11 +251,29 @@ export default function PreviewModal({ file, isOpen, onClose }) {
           {!loading && !error && blobUrl && (
             <div className="w-full flex items-center justify-center">
               {isImage && (
-                <img
-                  src={blobUrl}
-                  alt={file.originalName}
-                  className="max-h-[65vh] max-w-full rounded-xl object-contain shadow-2xl border border-slate-800"
-                />
+                <div className="flex flex-col items-center justify-center space-y-3 max-w-full">
+                  <img
+                    src={imgSrc || dataUrl || blobUrl}
+                    alt={file.originalName}
+                    onError={() => {
+                      if (dataUrl && imgSrc !== dataUrl) {
+                        setImgSrc(dataUrl);
+                      }
+                    }}
+                    className="max-h-[65vh] max-w-full rounded-xl object-contain shadow-2xl border border-slate-800"
+                  />
+                  <div className="flex items-center space-x-3 text-xs text-slate-400">
+                    <span>{file.originalName}</span>
+                    <span>•</span>
+                    <button
+                      onClick={downloadDecrypted}
+                      className="text-teal-400 hover:underline flex items-center space-x-1"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Download decrypted image</span>
+                    </button>
+                  </div>
+                </div>
               )}
 
               {isVideo && (

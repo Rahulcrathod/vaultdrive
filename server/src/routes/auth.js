@@ -242,13 +242,10 @@ router.post("/forgot-password", async (req, res, next) => {
       user = await User.findOne({ email });
     }
 
-    // Always return generic success to prevent email enumeration
-    const genericResponse = {
-      message: "If an account with that email exists, password reset instructions have been sent to it."
-    };
-
     if (!user) {
-      return res.json(genericResponse);
+      return res.status(404).json({
+        error: `No VaultDrive account was found for "${email}". Please verify the email address or register an account.`
+      });
     }
 
     // Generate unhashed reset token to email to user
@@ -271,14 +268,24 @@ router.post("/forgot-password", async (req, res, next) => {
     const clientOrigin = process.env.CLIENT_ORIGIN || "http://localhost:5173";
     const resetUrl = `${clientOrigin}/reset-password?token=${rawToken}`;
 
-    // Send email asynchronously without blocking the client response
-    sendPasswordResetEmail({
-      toEmail: user.email,
-      username: user.username,
-      resetUrl
-    }).catch(err => console.error("Email sending background error:", err.message));
+    // Send email with delivery verification
+    try {
+      await sendPasswordResetEmail({
+        toEmail: user.email,
+        username: user.username,
+        resetUrl
+      });
+    } catch (mailErr) {
+      console.error("[Auth] Reset email send failed:", mailErr.message);
+      return res.status(500).json({
+        error: "Failed to deliver reset email. Please try again or check SMTP configuration."
+      });
+    }
 
-    res.json(genericResponse);
+    res.json({
+      success: true,
+      message: `Password reset instructions sent to ${user.email}. Check your Inbox and Spam/Junk folders.`
+    });
   } catch (err) {
     next(err);
   }
