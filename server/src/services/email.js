@@ -8,31 +8,23 @@ async function getTransporter() {
   const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_SECURE } = process.env;
 
   if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
-    if (SMTP_HOST.toLowerCase().includes("gmail") || (SMTP_USER && SMTP_USER.toLowerCase().endsWith("@gmail.com"))) {
-      cachedTransporter = nodemailer.createTransport({
-        service: "gmail",
-        auth: {
-          user: SMTP_USER,
-          pass: SMTP_PASS
-        }
-      });
-      console.log(`[Email] Using Gmail service transport with user: ${SMTP_USER}`);
-      return cachedTransporter;
-    }
-
+    const port = Number(SMTP_PORT) || 587;
     cachedTransporter = nodemailer.createTransport({
       host: SMTP_HOST,
-      port: Number(SMTP_PORT) || 587,
-      secure: SMTP_SECURE === "true" || String(SMTP_PORT) === "465",
+      port,
+      secure: port === 465,
       auth: {
         user: SMTP_USER,
         pass: SMTP_PASS
       },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
       tls: {
         rejectUnauthorized: false
       }
     });
-    console.log(`[Email] Using configured SMTP server: ${SMTP_HOST}:${SMTP_PORT || 587}`);
+    console.log(`[Email] Using configured SMTP server: ${SMTP_HOST}:${port}`);
     return cachedTransporter;
   }
 
