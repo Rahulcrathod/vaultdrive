@@ -1,0 +1,27 @@
+{
+  "name": "vaultdrive",
+  "version": "1.0.0",
+  "description": "VaultDrive - Zero-Knowledge Personal Cloud Storage with 2 GB Quota",
+  "private": true,
+  "scripts": {
+    "build": "cd client && npm install && npm run build && cd ../server && npm install",
+    "start": "node server/src/server.js",
+    "server:install": "cd server && npm install",
+    "client:install": "cd client && npm install",
+    "install:all": "npm run server:install && npm run client:install",
+    "server:dev": "cd server && npm run dev",
+    "client:dev": "cd client && npm run dev",
+    "test:server": "cd server && npm test",
+    "test:client": "cd client && npm test",
+    "test:all": "npm run test:server && npm run test:client",
+    "build:client": "cd client && npm run build"
+  },
+  "keywords": [
+    "cloud-storage",
+    "privacy",
+    "e2ee",
+    "client-side-encryption",
+    "aes-256-gcm",
+    "vaultdrive"
+  ]
+}
