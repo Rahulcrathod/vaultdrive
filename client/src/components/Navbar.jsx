@@ -66,15 +66,24 @@ export default function Navbar() {
               </div>
             </div>
 
-            {/* User badge */}
-            <div className="flex items-center space-x-3 pl-2 border-l border-slate-800">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-slate-800 to-slate-700 border border-slate-600 flex items-center justify-center text-teal-400 font-semibold text-sm uppercase">
-                {user.username ? user.username[0] : "U"}
-              </div>
-              <div className="hidden sm:block text-left text-xs">
-                <p className="font-semibold text-slate-200">{user.username}</p>
-                <p className="text-slate-500 truncate max-w-[120px]">{user.email}</p>
-              </div>
+            {/* User badge & Profile Link */}
+            <div className="flex items-center space-x-2.5 pl-2 border-l border-slate-800">
+              <Link
+                to="/profile"
+                title="View & Edit Profile"
+                className="flex items-center space-x-2.5 p-1 rounded-xl hover:bg-slate-900/90 transition-all group"
+              >
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-slate-800 to-slate-700 border border-slate-600 group-hover:border-teal-500/50 flex items-center justify-center text-teal-400 font-semibold text-sm uppercase transition-colors shadow-sm">
+                  {user.username ? user.username[0] : "U"}
+                </div>
+                <div className="hidden sm:block text-left text-xs">
+                  <p className="font-semibold text-slate-200 group-hover:text-teal-300 transition-colors flex items-center space-x-1">
+                    <span>{user.fullName || user.username}</span>
+                    <span className="text-[9px] text-teal-400 bg-teal-500/10 px-1 py-0.2 rounded border border-teal-500/20">Profile</span>
+                  </p>
+                  <p className="text-slate-500 truncate max-w-[120px]">{user.email}</p>
+                </div>
+              </Link>
 
               <button
                 onClick={logout}

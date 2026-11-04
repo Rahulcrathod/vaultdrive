@@ -110,6 +110,22 @@ export function AuthProvider({ children }) {
     return Boolean(key);
   };
 
+  const reloadUser = async () => {
+    try {
+      const res = await api("/api/auth/me");
+      if (res?.user) {
+        setUser(res.user);
+        if (res.storage) setStorage(res.storage);
+      }
+    } catch (e) {
+      console.warn("Could not reload user:", e.message);
+    }
+  };
+
+  const updateUser = (updatedUser) => {
+    setUser((prev) => (prev ? { ...prev, ...updatedUser } : updatedUser));
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -122,6 +138,8 @@ export function AuthProvider({ children }) {
         logout,
         refreshStorage,
         unlockVault,
+        reloadUser,
+        updateUser,
         hasKey: Boolean(encryptionKey)
       }}
     >

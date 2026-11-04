@@ -51,6 +51,65 @@ const userSchema = new mongoose.Schema(
       type: Date,
       select: false,
       default: null
+    },
+    fullName: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 100
+    },
+    gender: {
+      type: String,
+      default: "",
+      trim: true,
+      enum: ["male", "female", "non-binary", "other", "prefer_not_to_say", ""]
+    },
+    dateOfBirth: {
+      type: String,
+      default: "",
+      trim: true
+    },
+    phone: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 30
+    },
+    address: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 250
+    },
+    city: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 100
+    },
+    state: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 100
+    },
+    country: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 100
+    },
+    postalCode: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 30
+    },
+    bio: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 500
     }
   },
   { timestamps: true }

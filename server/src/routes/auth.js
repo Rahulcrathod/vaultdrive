@@ -194,12 +194,193 @@ router.get("/me", requireAuth, async (req, res, next) => {
         id: user._id.toString(),
         email: user.email,
         username: user.username,
+        fullName: user.fullName || "",
+        gender: user.gender || "",
+        dateOfBirth: user.dateOfBirth || "",
+        phone: user.phone || "",
+        address: user.address || "",
+        city: user.city || "",
+        state: user.state || "",
+        country: user.country || "",
+        postalCode: user.postalCode || "",
+        bio: user.bio || "",
+        createdAt: user.createdAt,
         salt: user.salt,
         quotaBytes: user.quotaBytes,
         usedBytes: user.usedBytes,
         reservedBytes: user.reservedBytes
       },
       storage: metrics
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Update user profile details
+ */
+router.put("/profile", requireAuth, async (req, res, next) => {
+  try {
+    const schema = z.object({
+      username: z
+        .string()
+        .min(3, "Username must be at least 3 characters")
+        .max(50, "Username cannot exceed 50 characters")
+        .regex(/^[a-zA-Z0-9_.-]+$/, "Username can only contain letters, numbers, underscores, dashes, and periods")
+        .optional(),
+      email: z.string().email("Invalid email address").optional(),
+      fullName: z.string().max(100, "Full name cannot exceed 100 characters").optional(),
+      gender: z.enum(["male", "female", "non-binary", "other", "prefer_not_to_say", ""]).optional(),
+      dateOfBirth: z.string().max(30).optional(),
+      phone: z.string().max(30).optional(),
+      address: z.string().max(250, "Address cannot exceed 250 characters").optional(),
+      city: z.string().max(100).optional(),
+      state: z.string().max(100).optional(),
+      country: z.string().max(100).optional(),
+      postalCode: z.string().max(30).optional(),
+      bio: z.string().max(500, "Bio cannot exceed 500 characters").optional()
+    });
+
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.errors[0]?.message || "Invalid input data" });
+    }
+
+    const {
+      username,
+      email,
+      fullName,
+      gender,
+      dateOfBirth,
+      phone,
+      address,
+      city,
+      state,
+      country,
+      postalCode,
+      bio
+    } = parsed.data;
+
+    let user;
+    if (isUsingFallback()) {
+      user = localStore.findUserById(req.userId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+
+      if (username && username.toLowerCase() !== user.username.toLowerCase()) {
+        const existingUsername = localStore.findUserByUsername(username);
+        if (existingUsername && (existingUsername._id || existingUsername.id) !== req.userId) {
+          return res.status(409).json({ error: `Username "${username}" is already taken.` });
+        }
+      }
+
+      if (email && email.toLowerCase() !== user.email.toLowerCase()) {
+        const existingEmail = localStore.findUserByEmail(email);
+        if (existingEmail && (existingEmail._id || existingEmail.id) !== req.userId) {
+          return res.status(409).json({ error: `Email "${email}" is already registered to another account.` });
+        }
+      }
+
+      const updates = {};
+      if (username) updates.username = username.trim().toLowerCase();
+      if (email) updates.email = email.trim().toLowerCase();
+      if (fullName !== undefined) updates.fullName = fullName.trim();
+      if (gender !== undefined) updates.gender = gender;
+      if (dateOfBirth !== undefined) updates.dateOfBirth = dateOfBirth.trim();
+      if (phone !== undefined) updates.phone = phone.trim();
+      if (address !== undefined) updates.address = address.trim();
+      if (city !== undefined) updates.city = city.trim();
+      if (state !== undefined) updates.state = state.trim();
+      if (country !== undefined) updates.country = country.trim();
+      if (postalCode !== undefined) updates.postalCode = postalCode.trim();
+      if (bio !== undefined) updates.bio = bio.trim();
+
+      const updated = localStore.updateUser(req.userId, updates);
+      return res.json({
+        message: "Profile details updated successfully",
+        user: {
+          id: updated._id || updated.id,
+          email: updated.email,
+          username: updated.username,
+          fullName: updated.fullName || "",
+          gender: updated.gender || "",
+          dateOfBirth: updated.dateOfBirth || "",
+          phone: updated.phone || "",
+          address: updated.address || "",
+          city: updated.city || "",
+          state: updated.state || "",
+          country: updated.country || "",
+          postalCode: updated.postalCode || "",
+          bio: updated.bio || "",
+          createdAt: updated.createdAt,
+          salt: updated.salt,
+          quotaBytes: updated.quotaBytes,
+          usedBytes: updated.usedBytes
+        }
+      });
+    }
+
+    user = await User.findById(req.userId);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    // Validate username uniqueness
+    if (username && username.toLowerCase() !== user.username.toLowerCase()) {
+      const existingUsername = await User.findOne({
+        username: username.toLowerCase(),
+        _id: { $ne: user._id }
+      });
+      if (existingUsername) {
+        return res.status(409).json({ error: `Username "${username}" is already taken. Please choose another.` });
+      }
+      user.username = username.trim().toLowerCase();
+    }
+
+    // Validate email uniqueness
+    if (email && email.toLowerCase() !== user.email.toLowerCase()) {
+      const existingEmail = await User.findOne({
+        email: email.toLowerCase(),
+        _id: { $ne: user._id }
+      });
+      if (existingEmail) {
+        return res.status(409).json({ error: `Email "${email}" is already in use by another account.` });
+      }
+      user.email = email.trim().toLowerCase();
+    }
+
+    if (fullName !== undefined) user.fullName = fullName.trim();
+    if (gender !== undefined) user.gender = gender;
+    if (dateOfBirth !== undefined) user.dateOfBirth = dateOfBirth.trim();
+    if (phone !== undefined) user.phone = phone.trim();
+    if (address !== undefined) user.address = address.trim();
+    if (city !== undefined) user.city = city.trim();
+    if (state !== undefined) user.state = state.trim();
+    if (country !== undefined) user.country = country.trim();
+    if (postalCode !== undefined) user.postalCode = postalCode.trim();
+    if (bio !== undefined) user.bio = bio.trim();
+
+    await user.save();
+
+    res.json({
+      message: "Profile details updated successfully",
+      user: {
+        id: user._id.toString(),
+        email: user.email,
+        username: user.username,
+        fullName: user.fullName || "",
+        gender: user.gender || "",
+        dateOfBirth: user.dateOfBirth || "",
+        phone: user.phone || "",
+        address: user.address || "",
+        city: user.city || "",
+        state: user.state || "",
+        country: user.country || "",
+        postalCode: user.postalCode || "",
+        bio: user.bio || "",
+        createdAt: user.createdAt,
+        salt: user.salt,
+        quotaBytes: user.quotaBytes,
+        usedBytes: user.usedBytes
+      }
     });
   } catch (err) {
     next(err);
