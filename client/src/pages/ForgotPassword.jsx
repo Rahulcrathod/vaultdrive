@@ -10,6 +10,7 @@ export default function ForgotPassword() {
   const [error, setError] = useState(null);
 
   const [serverMsg, setServerMsg] = useState(null);
+  const [resetLink, setResetLink] = useState(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -26,6 +27,7 @@ export default function ForgotPassword() {
         body: JSON.stringify({ email: email.trim() })
       });
       setServerMsg(res.message);
+      if (res.resetUrl) setResetLink(res.resetUrl);
       setSubmitted(true);
     } catch (err) {
       setError(err.message || "Failed to request password reset.");
@@ -56,18 +58,33 @@ export default function ForgotPassword() {
 
         {submitted ? (
           <div className="space-y-4 animate-fade-in text-center">
-            <div className="p-4 rounded-2xl bg-teal-500/10 border border-teal-500/20 text-xs text-teal-300 space-y-2">
+            {resetLink && (
+              <div className="p-4 rounded-2xl bg-teal-500/15 border border-teal-500/30 text-center space-y-3">
+                <p className="text-xs font-bold text-teal-300">🔑 Instant Password Reset Link:</p>
+                <a
+                  href={resetLink}
+                  className="w-full py-2.5 px-4 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs inline-flex items-center justify-center shadow-lg shadow-teal-500/20 transition-all"
+                >
+                  Click Here to Set New Password Now
+                </a>
+                <p className="text-[10px] text-slate-400 break-all select-all font-mono bg-slate-950/60 p-2 rounded-lg border border-slate-800">
+                  {resetLink}
+                </p>
+              </div>
+            )}
+
+            <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 text-xs text-teal-300 space-y-2">
               <CheckCircle2 className="w-8 h-8 text-teal-400 mx-auto mb-1" />
-              <p className="font-semibold text-white text-sm">Check your email</p>
-              <p className="text-slate-300 leading-relaxed">
-                {serverMsg || `Password reset instructions have been sent to ${email}.`}
+              <p className="font-semibold text-white text-sm">Request Processed</p>
+              <p className="text-slate-300 leading-relaxed text-xs">
+                {serverMsg || `Password reset instructions have been generated for ${email}.`}
               </p>
               <div className="pt-2 text-[11px] text-amber-300/90 text-left bg-slate-950/40 p-2.5 rounded-lg border border-amber-500/20">
-                <p className="font-bold mb-1">📌 Can't find the email?</p>
+                <p className="font-bold mb-1">📌 Delivery Notes:</p>
                 <ul className="list-disc list-inside space-y-0.5 text-slate-300">
                   <li>Check your <strong>Spam / Junk</strong> folder.</li>
                   <li>Check <strong>Promotions / Updates</strong> tab in Gmail.</li>
-                  <li>If your account email is the same as the sender email, Gmail places it in your <strong>Sent Mail</strong>.</li>
+                  <li>If your email is the same as the sender email, check your <strong>Sent Mail</strong>.</li>
                 </ul>
               </div>
             </div>

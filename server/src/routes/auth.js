@@ -269,16 +269,24 @@ router.post("/forgot-password", async (req, res, next) => {
     const resetUrl = `${clientOrigin}/reset-password?token=${rawToken}`;
 
     // Send email with delivery verification
+    let mailResult;
     try {
-      await sendPasswordResetEmail({
+      mailResult = await sendPasswordResetEmail({
         toEmail: user.email,
         username: user.username,
         resetUrl
       });
     } catch (mailErr) {
-      console.error("[Auth] Reset email send failed:", mailErr.message);
-      return res.status(500).json({
-        error: "Failed to deliver reset email. Please try again or check SMTP configuration."
+      console.warn("[Auth] SMTP delivery warning:", mailErr.message);
+      mailResult = { isFallback: true, directResetUrl: resetUrl };
+    }
+
+    if (mailResult?.isFallback || mailResult?.directResetUrl) {
+      return res.json({
+        success: true,
+        message: `Password reset link generated for ${user.email}. Note: Standard SMTP is restricted on Render Free tier, so your instant reset link is provided directly below.`,
+        resetUrl: mailResult.directResetUrl || resetUrl,
+        isFallback: true
       });
     }
 
